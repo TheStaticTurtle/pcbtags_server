@@ -8,7 +8,7 @@ import traceback
 from pydantic import BaseModel
 
 import generators.spotify
-import tools.kicad.gerber2svg
+import tools.kicad.pcb2svg
 from generators.exception import GeneratorException
 
 app = FastAPI()
@@ -36,7 +36,7 @@ async def generators():
 async def pcb_colors():
 	return {
 		"detail": "success",
-		"data": tools.kicad.gerber2svg.THEMES
+		"data": tools.kicad.pcb2svg.THEMES
 	}
 
 
