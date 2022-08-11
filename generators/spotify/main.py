@@ -12,7 +12,7 @@ import requests
 from svgpathtools import Path, Line, CubicBezier
 from generators.spotify.exception import InvalidURISpotifyGeneratorException
 import tools.kicad.defaults
-from tools.kicad import PcbGraphicsLineNode, pcb2gerber, gerber2svg
+from tools.kicad import PcbGraphicsLineNode, pcb2gerber, gerber2svg, pcb2svg
 from tools.kicad.nodes import PcbGraphicsArcNode, PcbViaNode, PcbNetNode, PcbGraphicsSvgNode, PcbGraphicsPolyNode, PcbZoneNode
 from tools.profiler import Profiler
 
@@ -284,6 +284,9 @@ def generate(canvas: str, color: str, **kwargs):
 
 	profiler.log_event_finished("pcb_to_kicad_export_saved")
 
+	svgs = pcb2svg.generate_svg_from_gerber_and_drill(kicad_pcb_file.name)
+	profiler.log_event_finished("gerber_to_svg_conversion")
+
 	with tempfile.TemporaryDirectory() as tmp_dir:
 		pcb2gerber.generate_gerber_and_drill(kicad_pcb_file.name, tmp_dir)
 
@@ -297,12 +300,12 @@ def generate(canvas: str, color: str, **kwargs):
 
 		profiler.log_event_finished("gerber_archive")
 
-		svgs = gerber2svg.generate_svg_from_gerber_and_drill(
-			gerber_dir=tmp_dir,
-			theme=color
-		)
-
-		profiler.log_event_finished("gerber_to_svg_conversion")
+		# svgs = gerber2svg.generate_svg_from_gerber_and_drill(
+		# 	gerber_dir=tmp_dir,
+		# 	theme=color
+		# )
+		#
+		# profiler.log_event_finished("gerber_to_svg_conversion")
 
 	base64_gerber_archive = base64.b64encode(open(gerber_archive_file.name, "rb").read()).decode('utf8')
 
