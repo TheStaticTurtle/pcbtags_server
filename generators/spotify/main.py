@@ -1,19 +1,16 @@
 import base64
-import glob
 import io
 import os
 import re
-import sys
 import tempfile
-import time
 import zipfile
 
 import requests
 from svgpathtools import Path, Line, CubicBezier
 from generators.spotify.exception import InvalidURISpotifyGeneratorException
 import tools.kicad.defaults
-from tools.kicad import PcbGraphicsLineNode, pcb2gerber, gerber2svg
-from tools.kicad.nodes import PcbGraphicsArcNode, PcbViaNode, PcbNetNode, PcbGraphicsSvgNode, PcbGraphicsPolyNode, PcbZoneNode
+from tools.kicad import pcb2gerber, pcb2svg
+from tools.kicad.nodes import PcbGraphicsArcNode, PcbViaNode, PcbNetNode, PcbGraphicsSvgNode, PcbGraphicsPolyNode, PcbZoneNode, PcbGraphicsLineNode
 from tools.profiler import Profiler
 
 SPOTIFY_LOGO_POINTS = [(9.074399, -4.917528), (9.435994, -4.876703), (9.790608, -4.809652), (10.137025, -4.717188),
@@ -270,23 +267,22 @@ def generate(canvas: str, color: str, **kwargs):
 		"F&B.Cu"
 	)
 	pcb.add_child(k)
-
 	profiler.log_event_finished("pcb_generation")
 
 	stream = io.StringIO()
 	pcb.write(stream)
 	kicad_pcb_content = stream.getvalue()
-
 	profiler.log_event_finished("pcb_to_kicad_export")
 
 	with tempfile.NamedTemporaryFile(suffix=".kicad_pcb", delete=False) as kicad_pcb_file:
 		kicad_pcb_file.write(kicad_pcb_content.encode("utf-8"))
-
 	profiler.log_event_finished("pcb_to_kicad_export_saved")
+
+	svgs = pcb2svg.generate_svg_from_gerber_and_drill(kicad_pcb_file.name, theme=color)
+	profiler.log_event_finished("gerber_to_svg_conversion")
 
 	with tempfile.TemporaryDirectory() as tmp_dir:
 		pcb2gerber.generate_gerber_and_drill(kicad_pcb_file.name, tmp_dir)
-
 		profiler.log_event_finished("gerber_generation")
 
 		with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as gerber_archive_file:
@@ -294,23 +290,13 @@ def generate(canvas: str, color: str, **kwargs):
 				for root, dirs, files in os.walk(tmp_dir):
 					for file in files:
 						zipf.write(os.path.join(root, file), file)
-
 		profiler.log_event_finished("gerber_archive")
 
-		svgs = gerber2svg.generate_svg_from_gerber_and_drill(
-			gerber_dir=tmp_dir,
-			theme=color
-		)
-
-		profiler.log_event_finished("gerber_to_svg_conversion")
-
 	base64_gerber_archive = base64.b64encode(open(gerber_archive_file.name, "rb").read()).decode('utf8')
-
 	profiler.log_event_finished("archive_encoding")
 
 	os.unlink(kicad_pcb_file.name)
 	os.unlink(gerber_archive_file.name)
-
 	profiler.log_event_finished("file_cleanup")
 
 	return {
