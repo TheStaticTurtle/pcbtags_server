@@ -4,6 +4,7 @@ import typing
 from fastapi import FastAPI, Response, status
 from fastapi.responses import HTMLResponse
 import traceback
+import config
 
 from pydantic import BaseModel
 
@@ -16,6 +17,13 @@ app = FastAPI()
 enabled_generators = [
 	generators.spotify
 ]
+
+@app.get("/api/version")
+async def generators():
+	return {
+		"detail": "success",
+		"data": config.VERSION
+	}
 
 @app.get("/api/generators")
 async def generators():
