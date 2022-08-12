@@ -236,10 +236,18 @@ def generate(canvas: str, color: str, **kwargs):
 	pcb.add_child(PcbNetNode(1, "GND"))
 
 	# Keychain
-	code_start_x = 1 if kwargs["draw_spotify_logo"] else -10  # mm
 	tag_half_height = 6.25
 	tag_hole_diameter = 4
 	copper_fill_half_height = tag_half_height + 2
+
+	logo_x_offset = 0  # mm
+	code_start_x = 1  # mm
+	if not kwargs["draw_spotify_logo"]:
+		code_start_x = -10  # mm
+	if not kwargs["add_keychain_hole"]:
+		code_start_x -= tag_hole_diameter * 2
+		logo_x_offset -= tag_hole_diameter * 2
+
 
 	code = PcbGraphicsSvgNode(io.StringIO(svg_only_code), code_start_x, -7.5, 0.15, "F.Mask")
 	pcb.add_child(code)
@@ -247,14 +255,20 @@ def generate(canvas: str, color: str, **kwargs):
 	tag_length = code.last_x - tag_half_height / 2
 
 	if kwargs["draw_spotify_logo"]:
-		logo = PcbGraphicsPolyNode(SPOTIFY_LOGO_POINTS, 0.048, "F.Mask", fill="solid")
+		points = [
+			(x + logo_x_offset, y)
+			for x, y in SPOTIFY_LOGO_POINTS
+		]
+		logo = PcbGraphicsPolyNode(points, 0.048, "F.Mask", fill="solid")
 		pcb.add_child(logo)
 
 	pcb.add_child(PcbGraphicsLineNode(0, +tag_half_height, tag_length, +tag_half_height, 0.254, "Edge.Cuts"))
 	pcb.add_child(PcbGraphicsLineNode(0, -tag_half_height, tag_length, -tag_half_height, 0.254, "Edge.Cuts"))
 	pcb.add_child(PcbGraphicsArcNode(0, +tag_half_height, -tag_half_height, 0, 0, -tag_half_height, 0.254, "Edge.Cuts"))
 	pcb.add_child(PcbGraphicsArcNode(tag_length, -tag_half_height, tag_length + tag_half_height, 0, tag_length, tag_half_height, 0.254, "Edge.Cuts"))
-	pcb.add_child(PcbViaNode(0, 0, tag_hole_diameter + 0.25, tag_hole_diameter, ["F.Cu", "B.Cu"], 1))
+
+	if kwargs["add_keychain_hole"]:
+		pcb.add_child(PcbViaNode(0, 0, tag_hole_diameter + 0.25, tag_hole_diameter, ["F.Cu", "B.Cu"], 1))
 
 	copper_fill_path = Path()
 	copper_fill_path.append(CubicBezier(complex(0, -tag_half_height), complex(-tag_half_height * 1.35, -tag_half_height), complex(-tag_half_height * 1.35, +tag_half_height), complex(0, tag_half_height), ))
