@@ -25,6 +25,8 @@ async def generators():
 			{
 				"name": generator.TEXT,
 				"key": generator.KEY,
+				"desc": generator.DESC,
+				"short_desc": generator.SHORT_DESC,
 				"available_canvases": generator.AVAILABLE_CANVASES,
 				"options": generator.OPTIONS,
 			}
@@ -66,9 +68,9 @@ async def generate(generator_key: str, options: GenerateModel, response: Respons
 		response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 		tb = traceback.format_exc()
 		sys.stderr.write(tb)
-		return {"detail": f"A generator exception occurred while trying to generate the design: \"{str(e)}\"", "traceback": tb}
+		return {"detail": f"A generator exception occurred while trying to generate the design.", "real_error": str(e), "traceback": tb}
 	except Exception as e:
 		response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 		tb = traceback.format_exc()
 		sys.stderr.write(tb)
-		return {"detail": f"A unknown exception occurred: \"{str(e)}\"", "traceback": tb}
+		return {"detail": f"A unknown fatal exception occurred.", "real_error": str(e), "traceback": tb}

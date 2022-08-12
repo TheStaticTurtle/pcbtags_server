@@ -7,5 +7,8 @@ class SpotifyGeneratorException(GeneratorException):
 class InvalidURISpotifyGeneratorException(GeneratorException):
 	pass
 
+class ScannablesCDNSpotifyGeneratorException(InvalidURISpotifyGeneratorException):
+	pass
+
 class SVGCodeSpotifyGeneratorException(GeneratorException):
 	pass

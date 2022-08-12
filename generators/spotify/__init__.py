@@ -2,6 +2,8 @@ from .main import generate
 
 TEXT = "Spotify tag"
 KEY = "spotify_tag"
+SHORT_DESC = "Generate a keychain sized tag with a spotify code on the front"
+DESC = SHORT_DESC
 AVAILABLE_CANVASES = [
 	{"key": "keychain", "text": "Keychain"}
 ]
