@@ -284,7 +284,7 @@ def generate(canvas: str, color: str, **kwargs):
 
 	profiler.log_event_finished("pcb_to_kicad_export_saved")
 
-	svgs = pcb2svg.generate_svg_from_gerber_and_drill(kicad_pcb_file.name)
+	svgs = pcb2svg.generate_svg_from_gerber_and_drill(kicad_pcb_file.name, theme=color)
 	profiler.log_event_finished("gerber_to_svg_conversion")
 
 	with tempfile.TemporaryDirectory() as tmp_dir:
