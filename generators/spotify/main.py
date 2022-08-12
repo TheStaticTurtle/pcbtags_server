@@ -202,6 +202,7 @@ SPOTIFY_LOGO_POINTS = [(9.074399, -4.917528), (9.435994, -4.876703), (9.790608, 
                        (6.840768, -4.560093), (7.06271, -4.645747), (7.288693, -4.720517), (7.518316, -4.784238),
                        (7.751178, -4.836745), (7.986882, -4.877872), (8.225026, -4.907453), (8.465211, -4.925324),
                        (8.707038, -4.931317)]
+OPEN_SPOTIFY_REGEX = re.compile(r"https:\/\/open.spotify.com\/((?:track)|(?:user))\/(.+?)(?:\?|$)")
 
 def remap(x, in_min, in_max, out_min, out_max):
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -211,11 +212,17 @@ def generate(canvas: str, color: str, **kwargs):
 	profiler = Profiler()
 	profiler.start()
 
-	URL = f"https://scannables.scdn.co/uri/plain/svg/ffffff/black/1024/{kwargs['code']}"
+	uri = kwargs["code"]
+	if re.match(OPEN_SPOTIFY_REGEX, kwargs["code"]):
+		result = OPEN_SPOTIFY_REGEX.search(kwargs["code"])
+		print(f"Changing code to: spotify:{result.group(1)}:{result.group(2)}")
+		uri = f"spotify:{result.group(1)}:{result.group(2)}"
+
+	URL = f"https://scannables.scdn.co/uri/plain/svg/ffffff/black/1024/{uri}"
 	response = requests.get(URL)
 	if response.status_code >= 400:
 		raise InvalidURISpotifyGeneratorException(
-			"Invalid code" if response.status_code == 400 else "Error while retrieving the code from scannables.scdn.co")
+			f"Invalid code or code transformation failed (used: {uri})" if response.status_code == 400 else f"Error while retrieving the code from scannables.scdn.com or code transformation failed (used: {uri})")
 
 	profiler.log_event_finished("scannables_cdn_download")
 
@@ -307,5 +314,6 @@ def generate(canvas: str, color: str, **kwargs):
 			"render": svgs,
 			"archive": base64_gerber_archive
 		},
-		"profiler": profiler.end()
+		"profiler": profiler.end(),
+		"spotify_uri": uri
 	}
