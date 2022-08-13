@@ -1,0 +1,12 @@
+UseIconsInMenus=1
+IconScale=0
+MousewheelPAN=0
+ZoomNoCenter=0
+AutoPAN=1
+OpenGLAntialiasingMode=0
+CairoAntialiasingMode=0
+WorkingDir=/root/
+ShowEnvVarWarningDialog=1
+[EnvironmentVariables]
+KICAD_USER_TEMPLATE_DIR=
+KIGITHUB=https://github.com/KiCad
