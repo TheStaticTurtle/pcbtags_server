@@ -15,7 +15,8 @@ def add_kicad_to_path():
 		os.add_dll_directory(str(installPath / "bin"))
 		os.add_dll_directory(str(installPath / "bin" / "DLLs"))
 		site.addsitedir(str(installPath / "bin" / "Lib" / "site-packages"))
-
+	else:
+		site.addsitedir("/usr/lib/python3/dist-packages/")
 
 def kicad2step(kicad_pcb_file, step_file, drill_origin=True, grid_origin=False, force=True, no_virtual=False, substitute_models=False, min_distance="0.01mm"):
 	assert grid_origin != drill_origin
