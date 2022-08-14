@@ -252,7 +252,7 @@ THEMES_DICT = {}
 for theme in THEMES:
 	THEMES_DICT[theme["key"]] = theme
 
-def generate_svg_from_gerber_and_drill(filename: str, theme: typing.Union[None, str] = None):
+def generate_svg_from_pcb(filename: str, theme: typing.Union[None, str] = None):
 	print(filename)
 	if theme in THEMES_DICT:
 		theme = THEMES_DICT[theme]
@@ -356,6 +356,6 @@ def generate_svg_from_gerber_and_drill(filename: str, theme: typing.Union[None, 
 
 
 	return {
-		"top": top_layer,
-		"bottom": bottom_layer,
+		"top": top_layer.decode("utf8"),
+		"bottom": bottom_layer.decode("utf8"),
 	}

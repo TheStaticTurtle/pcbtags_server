@@ -1,5 +1,6 @@
 from .main import generate
 
+CACHING_ALLOWED = True
 TEXT = "Spotify tag"
 KEY = "spotify_tag"
 SHORT_DESC = "Generate a keychain sized tag with a spotify code on the front"

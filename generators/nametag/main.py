@@ -29,6 +29,7 @@ QRCODE_VERSION_SCALE = {
 
 def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 	pcb = tools.kicad.defaults.make_pcb()
+	profiler.log_event("pcbfile_base", facility="generate")
 
 	# Keychain
 	start_x = 0  # mm
@@ -58,6 +59,8 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 		qr.add_data(vcard)
 		qr.make(fit=True)
 
+		profiler.log_event("qr_code_calculation", facility="generate")
+
 		if qr.version not in QRCODE_VERSION_SCALE:
 			raise QRCodeNametagGeneratorException("QR Code is contains too much data to be readable once printed")
 
@@ -71,6 +74,8 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 
 		name_x = code.last_x + tag_half_height / 4 + 0.5
 		start_x_after_code = code.last_x + tag_half_height / 4
+
+		profiler.log_event("qr_adapted", facility="generate")
 	else:
 		name_x = x + tag_half_height / 1.25 + 0.5
 		start_x_after_code = x + tag_half_height / 1.25
@@ -106,6 +111,8 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 	phone_x += text_size.w
 	pcb.add_child(text_node)
 
+	profiler.log_event("names_printed", facility="generate")
+
 	# Margins & Separator line
 	end = max(name_x, max(phone_x + 1.5, email_x))
 	pcb.add_child(PcbGraphicsLineNode(start_x_after_code, 0, end, 0, 0.6, "F.Mask"))
@@ -119,6 +126,6 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 		hole_diameter=tag_hole_diameter
 	)
 
-	profiler.log_event_finished("pcb_generation")
+	profiler.log_event("outline_drawing", facility="generate")
 
 	return kicad_export(pcb, color, profiler=profiler)

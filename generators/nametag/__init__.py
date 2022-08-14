@@ -1,5 +1,6 @@
 from .main import generate
 
+CACHING_ALLOWED = False
 TEXT = "Nametag"
 KEY = "nametag"
 SHORT_DESC = "Simple nametag with a QRCODE containing contact infos"

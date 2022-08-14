@@ -24,6 +24,7 @@ def is_spotify_uri_valid(uri):
 
 def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 	pcb = tools.kicad.defaults.make_pcb()
+	profiler.log_event("pcbfile_base", facility="generate")
 
 	uri = kwargs["code"]
 	if re.match(OPEN_SPOTIFY_REGEX, kwargs["code"]):
@@ -39,12 +40,12 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 	if response.status_code >= 400:
 		raise ScannablesCDNSpotifyGeneratorException(f"Error while retrieving the code from scannables.scdn.com (used: {uri}, response code: {response.status_code})")
 
-	profiler.log_event_finished("scannables_cdn_download")
+	profiler.log_event("scannables_cdn_download", facility="generate")
 
 	svg_without_rect = re.sub(r'<rect .+fill="#ffffff".+>\n', "", response.text)
 	svg_only_code = re.sub(r'<g .+g>\n', "", svg_without_rect)
 
-	profiler.log_event_finished("code_processing")
+	profiler.log_event("code_processing", facility="generate")
 
 	# Keychain
 	tag_half_height = 6.25
@@ -61,6 +62,8 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 	code = PcbGraphicsSvgNode(io.StringIO(svg_only_code), code_start_x, -7.5, 0.15, "F.Mask")
 	pcb.add_child(code)
 
+	profiler.log_event("code_drawing", facility="generate")
+
 	if kwargs["draw_spotify_logo"]:
 		points = [
 			(x + logo_x_offset, y)
@@ -68,6 +71,8 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 		]
 		logo = PcbGraphicsPolyNode(points, 0.048, "F.Mask", fill="solid")
 		pcb.add_child(logo)
+
+		profiler.log_event("logo_drawing", facility="generate")
 
 	tag_length = code.last_x - tag_half_height / 2
 	keychain_base_pcb(
@@ -78,6 +83,6 @@ def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
 		hole_diameter=tag_hole_diameter
 	)
 
-	profiler.log_event_finished("pcb_generation")
+	profiler.log_event("pcb_outline_drawn", facility="generate")
 
 	return kicad_export(pcb, color, profiler=profiler)
