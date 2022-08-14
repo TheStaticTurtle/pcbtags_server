@@ -1,7 +1,7 @@
-from tools.kicad import ListNode, ValueNode, PcbLayerNode
+from .nodes import ListNode, ValueNode, PcbLayerNode, PcbNetNode
 
 
-def default_document() -> ListNode:
+def default_pcbfile_document() -> ListNode:
 	doc = ListNode("kicad_pcb")
 	doc.add_child(ValueNode("version", "20211014", False))
 	doc.add_child(ValueNode("generator", "pcbnew", True))
@@ -13,9 +13,7 @@ def default_document() -> ListNode:
 	doc.add_child(ValueNode("paper", "A4", True))
 
 	return doc
-
-
-def default_layers() -> ListNode:
+def default_pcbfile_layers() -> ListNode:
 	layers = ListNode("layers")
 	layers.add_child(PcbLayerNode(0, "F.Cu", "signal"))
 	layers.add_child(PcbLayerNode(31, "B.Cu", "signal"))
@@ -47,8 +45,7 @@ def default_layers() -> ListNode:
 	layers.add_child(PcbLayerNode(57, "User.8", "user"))
 	layers.add_child(PcbLayerNode(58, "User.9", "user"))
 	return layers
-
-def default_setup() -> ListNode:
+def default_pcbfile_setup() -> ListNode:
 	setup = ListNode("setup")
 	setup.add_child(ValueNode("pad_to_mask_clearance", "0", False))
 
@@ -87,10 +84,14 @@ def default_setup() -> ListNode:
 	setup.add_child(setup_pcbplotparams)
 
 	return setup
-
-
-def default() -> ListNode:
-	doc = default_document()
-	doc.add_child(default_layers())
-	doc.add_child(default_setup())
+def default_pcbfile() -> ListNode:
+	doc = default_pcbfile_document()
+	doc.add_child(default_pcbfile_layers())
+	doc.add_child(default_pcbfile_setup())
 	return doc
+
+def make_pcb() -> ListNode:
+	pcb = default_pcbfile()
+	pcb.add_child(PcbNetNode(0, ""))
+	pcb.add_child(PcbNetNode(1, "GND"))
+	return pcb

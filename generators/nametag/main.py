@@ -1,22 +1,15 @@
-import base64
 import io
-import os
-import re
-import tempfile
-import zipfile
 import qrcode
 import qrcode.image.svg
-from qrcode.util import mode_sizes_for_version
-from svgpathtools import Path, Line, CubicBezier
-from generators.nametag.exception import NametagGeneratorException, QRCodeNametagGeneratorException
+
 import tools.kicad.defaults
-from tools.kicad import pcb2gerber, pcb2svg
+from tools.kicad.export import kicad_export
 from tools.kicad.math import getTextWidth
-from tools.kicad.nodes import PcbGraphicsArcNode, PcbViaNode, PcbNetNode, PcbGraphicsSvgNode, PcbGraphicsPolyNode, PcbZoneNode, PcbGraphicsLineNode, PcbGraphicsTextNode
+from tools.kicad.nodes import PcbGraphicsSvgNode, PcbGraphicsLineNode, PcbGraphicsTextNode
 from tools.profiler import Profiler
 
-def remap(x, in_min, in_max, out_min, out_max):
-	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+from ..common import keychain_base_pcb
+from .exception import *
 
 QRCODE_VERSION_SCALE = {
 	1: 5.68,
@@ -30,23 +23,17 @@ QRCODE_VERSION_SCALE = {
 	9: 2.24,
 	10: 2.08,
 	11: 1.95,
-	# 12: 1.82,
+	# 12: 1.82,  # Disabled on purpose, too small for the pcb
 	# 13: 1.71,
 }
 
-def generate(canvas: str, color: str, **kwargs):
-	profiler = Profiler()
-	profiler.start()
-
-	pcb = tools.kicad.defaults.default()
-	pcb.add_child(PcbNetNode(0, ""))
-	pcb.add_child(PcbNetNode(1, "GND"))
+def generate(canvas: str, color: str, profiler: Profiler, **kwargs):
+	pcb = tools.kicad.defaults.make_pcb()
 
 	# Keychain
 	start_x = 0  # mm
 	tag_half_height = 6.25
 	tag_hole_diameter = 4
-	copper_fill_half_height = tag_half_height + 2
 
 	x = start_x
 	if not kwargs["add_keychain_hole"]:
@@ -124,71 +111,14 @@ def generate(canvas: str, color: str, **kwargs):
 	pcb.add_child(PcbGraphicsLineNode(start_x_after_code, 0, end, 0, 0.6, "F.Mask"))
 
 	tag_length = end - tag_half_height / 2
-	pcb.add_child(PcbGraphicsLineNode(0, +tag_half_height, tag_length, +tag_half_height, 0.254, "Edge.Cuts"))
-	pcb.add_child(PcbGraphicsLineNode(0, -tag_half_height, tag_length, -tag_half_height, 0.254, "Edge.Cuts"))
-	pcb.add_child(PcbGraphicsArcNode(0, +tag_half_height, -tag_half_height, 0, 0, -tag_half_height, 0.254, "Edge.Cuts"))
-	pcb.add_child(PcbGraphicsArcNode(tag_length, -tag_half_height, tag_length + tag_half_height, 0, tag_length, tag_half_height, 0.254, "Edge.Cuts"))
-
-	if kwargs["add_keychain_hole"]:
-		pcb.add_child(PcbViaNode(0, 0, tag_hole_diameter + 0.25, tag_hole_diameter, ["F.Cu", "B.Cu"], 1))
-
-	copper_fill_path = Path()
-	copper_fill_path.append(CubicBezier(complex(0, -tag_half_height), complex(-tag_half_height * 1.35, -tag_half_height), complex(-tag_half_height * 1.35, +tag_half_height), complex(0, tag_half_height), ))
-	copper_fill_path.append(Line(complex(0, tag_half_height), complex(tag_length, tag_half_height), ))
-	copper_fill_path.append(CubicBezier(complex(tag_length, tag_half_height), complex(tag_length + tag_half_height * 1.35, +tag_half_height), complex(tag_length + tag_half_height * 1.35, -tag_half_height), complex(tag_length, -tag_half_height)))
-	copper_fill_path.append(Line(complex(tag_length, -tag_half_height), complex(0, -tag_half_height), ))
-
-	copper_fill_polygon = []
-	for i in range(250):
-		cp = copper_fill_path.point(i / (250 - 1))
-		copper_fill_polygon.append((cp.real, cp.imag))
-
-	k = PcbZoneNode(
-		[(tag_length + copper_fill_half_height, copper_fill_half_height), (-copper_fill_half_height, copper_fill_half_height), (-copper_fill_half_height, -copper_fill_half_height), (tag_length + copper_fill_half_height, -copper_fill_half_height) ],
-		[{"layer": "F.Cu", "points": copper_fill_polygon}, {"layer": "B.Cu", "points": copper_fill_polygon}, ],
-		1, "GND",
-		"F&B.Cu"
+	keychain_base_pcb(
+		pcb=pcb,
+		half_height=tag_half_height,
+		length=tag_length,
+		hole=kwargs["add_keychain_hole"],
+		hole_diameter=tag_hole_diameter
 	)
-	pcb.add_child(k)
+
 	profiler.log_event_finished("pcb_generation")
 
-	stream = io.StringIO()
-	pcb.write(stream)
-	kicad_pcb_content = stream.getvalue()
-	profiler.log_event_finished("pcb_to_kicad_export")
-
-	with tempfile.NamedTemporaryFile(suffix=".kicad_pcb", delete=False) as kicad_pcb_file:
-		kicad_pcb_file.write(kicad_pcb_content.encode("utf-8"))
-	profiler.log_event_finished("pcb_to_kicad_export_saved")
-
-	svgs = pcb2svg.generate_svg_from_gerber_and_drill(kicad_pcb_file.name, theme=color)
-	profiler.log_event_finished("gerber_to_svg_conversion")
-
-	with tempfile.TemporaryDirectory() as tmp_dir:
-		pcb2gerber.generate_gerber_and_drill(kicad_pcb_file.name, tmp_dir)
-		profiler.log_event_finished("gerber_generation")
-
-		with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as gerber_archive_file:
-			with zipfile.ZipFile(gerber_archive_file.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-				for root, dirs, files in os.walk(tmp_dir):
-					for file in files:
-						zipf.write(os.path.join(root, file), file)
-		profiler.log_event_finished("gerber_archive")
-
-	base64_gerber_archive = base64.b64encode(open(gerber_archive_file.name, "rb").read()).decode('utf8')
-	profiler.log_event_finished("archive_encoding")
-
-	os.unlink(kicad_pcb_file.name)
-	os.unlink(gerber_archive_file.name)
-	profiler.log_event_finished("file_cleanup")
-
-	return {
-		"kicad": {
-			".kicad_pcb": kicad_pcb_content
-		},
-		"gerber": {
-			"render": svgs,
-			"archive": base64_gerber_archive
-		},
-		"profiler": profiler.end(),
-	}
+	return kicad_export(pcb, color, profiler=profiler)

@@ -1,18 +1,17 @@
 import sys
 import typing
+import traceback
 
 from fastapi import FastAPI, Response, status
-from fastapi.responses import HTMLResponse
-import traceback
-import config
-
 from pydantic import BaseModel
+
+import config
+import tools.kicad.pcb2svg
+from tools.profiler import Profiler
+from generators.exception import GeneratorException
 
 import generators.spotify
 import generators.nametag
-
-import tools.kicad.pcb2svg
-from generators.exception import GeneratorException
 
 app = FastAPI()
 
@@ -70,10 +69,13 @@ async def generate(generator_key: str, options: GenerateModel, response: Respons
 		return {"detail": f"Generator \"{generator_key}\" does not exist"}
 
 	try:
-		k = generator.generate(options.canvas, options.color, **options.options)
+		profiler = Profiler()
+		profiler.start()
+		data = generator.generate(options.canvas, options.color, profiler, **options.options)
+		data["profiler"] = profiler.end()
 		return {
 			"detail": f"success",
-			"data": k
+			"data": data
 		}
 	except GeneratorException as e:
 		response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
