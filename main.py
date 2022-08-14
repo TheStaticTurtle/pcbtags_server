@@ -9,13 +9,16 @@ import config
 from pydantic import BaseModel
 
 import generators.spotify
+import generators.nametag
+
 import tools.kicad.pcb2svg
 from generators.exception import GeneratorException
 
 app = FastAPI()
 
 enabled_generators = [
-	generators.spotify
+	generators.spotify,
+	generators.nametag
 ]
 
 @app.get("/api/version")
