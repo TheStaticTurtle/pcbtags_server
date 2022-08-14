@@ -7,8 +7,9 @@ from tools.kicad import pcb2gerber, pcb2svg
 from tools.kicad.nodes import *
 from tools.profiler import Profiler
 
+import tools.models.data
 
-def kicad_export(pcb: ListNode, pcb_theme, profiler: Profiler = None) -> dict:
+def kicad_export(pcb: ListNode, pcb_theme, profiler: Profiler = None) -> tools.models.data.PcbExportedData:
 	if profiler is None:
 		profiler = Profiler()
 
@@ -21,7 +22,7 @@ def kicad_export(pcb: ListNode, pcb_theme, profiler: Profiler = None) -> dict:
 		kicad_pcb_file.write(kicad_pcb_content.encode("utf-8"))
 	profiler.log_event("pcb_to_kicad_export_saved", facility="kicad_export")
 
-	svgs = pcb2svg.generate_svg_from_pcb(kicad_pcb_file.name, theme=pcb_theme)
+	svgs = pcb2svg.generate_svg_from_pcb(kicad_pcb_file.name, pcb_theme=pcb_theme)
 	profiler.log_event("pcb_to_svg_conversion", facility="kicad_export")
 
 	with tempfile.TemporaryDirectory() as tmp_dir:
@@ -42,12 +43,13 @@ def kicad_export(pcb: ListNode, pcb_theme, profiler: Profiler = None) -> dict:
 	os.unlink(gerber_archive_file.name)
 	profiler.log_event("file_cleanup", facility="kicad_export")
 
-	return {
-		"kicad": {
-			".kicad_pcb": kicad_pcb_content
-		},
-		"gerber": {
-			"render": svgs,
-			"archive": base64_gerber_archive
-		}
-	}
+	return tools.models.data.PcbExportedData(
+		kicad=tools.models.data.PcbExportedKicadFiles(
+			kicad_pcb=kicad_pcb_content,
+		),
+		gerber=tools.models.data.PcbExportedGerber(
+			render=svgs,
+			archive=base64_gerber_archive,
+		),
+		profiler=profiler.__dict__
+	)

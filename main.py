@@ -1,122 +1,149 @@
-import hashlib
 import json
 import sys
-import typing
+
 import traceback
 from datetime import timedelta
 
 import redis as pyredis
-from fastapi import FastAPI, Response, status
-from pydantic import BaseModel
+from fastapi import FastAPI, status
+from fastapi.responses import JSONResponse
 
 import config
 import tools.kicad.pcb2svg
 from tools.profiler import Profiler
 from generators.exception import GeneratorException
 
+import tools.models.api
+import tools.models.data
+
 import generators.spotify
 import generators.nametag
 
 redis = pyredis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB, password=config.REDIS_PASSWORD)
-app = FastAPI()
+app = FastAPI(
+	title="PCBTAGS",
+	description="Api for generating pcb based tags",
+	version=config.VERSION
+)
 
 enabled_generators = [
 	generators.spotify,
 	generators.nametag
 ]
 
-@app.get("/api/version")
-async def generators():
-	return {
-		"detail": "success",
-		"data": config.VERSION
-	}
 
-@app.get("/api/generators")
-async def generators():
-	return {
-		"detail": "success",
-		"data": [
-			{
-				"caching_allowed": generator.CACHING_ALLOWED,
-				"name": generator.TEXT,
-				"key": generator.KEY,
-				"desc": generator.DESC,
-				"short_desc": generator.SHORT_DESC,
-				"available_canvases": generator.AVAILABLE_CANVASES,
-				"options": generator.OPTIONS,
-			}
-			for generator in enabled_generators
-		]
-	}
+@app.get("/api/version", response_model=tools.models.api.ApiVersionResponse)
+async def version():
+	response = tools.models.api.ApiVersionResponse(
+		version=config.VERSION
+	)
+	return response
 
-@app.get("/api/pcb_colors")
+@app.get("/api/generators", response_model=tools.models.api.ApiGeneratorsResponse)
+async def generators():
+	response = tools.models.api.ApiGeneratorsResponse(
+		generators=[generator.INFOS for generator in enabled_generators]
+	)
+	return response
+
+@app.get("/api/pcb_colors", response_model=tools.models.api.ApiPcbColorsResponse)
 async def pcb_colors():
-	return {
-		"detail": "success",
-		"data": tools.kicad.pcb2svg.THEMES
+	response = tools.models.api.ApiPcbColorsResponse(
+		colors=tools.kicad.pcb2svg.THEMES
+	)
+	return response
+
+
+@app.post(
+	"/api/generators/{generator_key}",
+	status_code=200,
+	response_model=tools.models.api.ApiGeneratedDataResponse,
+	responses={
+		404: {"model": tools.models.api.BaseApiResponse},
+		400: {"model": tools.models.api.BaseApiResponse},
+		500: {"model": tools.models.api.BaseApiResponse},
 	}
-
-
-class GenerateOptionModel(BaseModel):
-	color: str
-	canvas: str
-	options: typing.Dict
-
-	def hash(self):
-		h = hashlib.new('sha256')
-		h.update((self.color+"+"+self.canvas+"+"+json.dumps(self.options)).encode("utf8"))
-		return h.hexdigest()
-
-@app.post("/api/generators/{generator_key}", status_code=200)
-async def generate(generator_key: str, options: GenerateOptionModel, response: Response):
+)
+async def generate(generator_key: str, options: tools.models.api.ApiGenerateParamsModel):
 	profiler = Profiler()
 	profiler.start()
 
 	generator = None
 	for g in enabled_generators:
-		if g.KEY == generator_key:
+		if g.INFOS.key == generator_key:
 			generator = g
 
 	if generator is None:
-		response.status_code = status.HTTP_400_BAD_REQUEST
-		return {"detail": f"Generator \"{generator_key}\" does not exist"}
+		return JSONResponse(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			content=tools.models.api.BaseApiResponse(
+				error=tools.models.data.ErrorModel(
+					short_text=f"Selected generator ({generator_key}) does not exist",
+					traceback=None,
+				)
+			).dict()
+		)
 
 	try:
 		options_hash = options.hash()
-		cached_data = None
-		if generator.CACHING_ALLOWED:
+		response_was_cached = False
+		data = None
+
+		if generator.INFOS.caching_allowed:
 			cached_data = redis.get(options_hash)
+			if cached_data:
+				try:
+					data = json.loads(cached_data)
+					data = tools.models.data.PcbExportedData(
+						**data
+					)
 
-		if cached_data:
-			data = json.loads(cached_data)
-			profiler.log_event("cache_loaded", facility="cache")
+					response_was_cached = True
+					profiler.log_event("cache_loaded", facility="cache")
 
-			for event in data["profiler"]["events"]:
-				profiler.log_event(event['name'], cached=True, facility=event['facility'])
+					for event in data.profiler["events"]:
+						profiler.log_event(event['name'], cached=True, facility=event['facility'])
+				except Exception as e:
+					profiler.log_event("cache_load_failed", facility="cache")
+					print(e)
 
-		else:
+		if not response_was_cached or data is None:
 			data = generator.generate(options.canvas, options.color, profiler, **options.options)
-			data["profiler"] = profiler.__dict__
-			if generator.CACHING_ALLOWED:
-				state = redis.setex(options_hash, timedelta(minutes=config.CACHE_TIME_MINUTES), value=json.dumps(data).encode("utf8"))
+			data.profiler = profiler.__dict__
+
+			if generator.INFOS.caching_allowed:
+				if not redis.setex(options_hash, timedelta(minutes=config.CACHE_TIME_MINUTES), value=data.json()):
+					print("Failed to save to cache")
 				profiler.log_event("cache_saved", facility="cache")
 
 		profiler.end()
-		data["profiler"] = profiler.__dict__
-		return {
-			"detail": f"success",
-			"data": data,
-			"cached": cached_data is not None
-		}
+		data.profiler = profiler.__dict__
+		return tools.models.api.ApiGeneratedDataResponse(
+			result=data,
+			response_cached=response_was_cached,
+		)
 
 	except GeneratorException as e:
-		response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 		tb = traceback.format_exc()
 		sys.stderr.write(tb)
-		return {"detail": f"A generator exception occurred while trying to generate the design.", "real_error": str(e), "traceback": tb}
+		return JSONResponse(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			content=tools.models.api.BaseApiResponse(
+				error=tools.models.data.ErrorModel(
+					short_text=str(e),
+					traceback=tb,
+				)
+			).dict()
+		)
 	except Exception as e:
-		response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 		tb = traceback.format_exc()
 		sys.stderr.write(tb)
-		return {"detail": f"A unknown fatal exception occurred.", "real_error": str(e), "traceback": tb}
+		return JSONResponse(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			content=tools.models.api.BaseApiResponse(
+				error=tools.models.data.ErrorModel(
+					short_text=str(e),
+					traceback=tb,
+				)
+			).dict()
+		)
