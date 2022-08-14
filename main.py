@@ -23,7 +23,10 @@ redis = pyredis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.
 app = FastAPI(
 	title="PCBTAGS",
 	description="Api for generating pcb based tags",
-	version=config.VERSION
+	version=config.VERSION,
+	openapi_url="/api/openapi.json",
+	docs_url="/api/swagger",
+	redoc_url="/api/docs",
 )
 
 enabled_generators = [
